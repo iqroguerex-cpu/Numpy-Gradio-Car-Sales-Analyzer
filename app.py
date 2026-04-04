@@ -1,133 +1,128 @@
 import numpy as np
-import gradio as gr
+import pandas as pd
+import streamlit as st
+import matplotlib.pyplot as plt
+
+st.set_page_config(page_title="Car Sales Analyzer", layout="centered")
+
+st.title("🚗 Car Sales Analyzer Dashboard")
+
+# -------------------------------
+# Generate Sales Data
+# -------------------------------
+st.header("🎲 Generate Sales Data")
+
+n = st.number_input("Number of Salespeople", min_value=1, value=8)
+
+if st.button("Generate Sales Data"):
+    names = np.array([f"Salesperson {i+1}" for i in range(int(n))])
+    sales = np.random.randint(0, 21, size=(int(n), 3))
+
+    df = pd.DataFrame(sales, columns=["SUV", "Sedan", "Hatchback"])
+    df.insert(0, "Salesperson", names)
+
+    st.session_state["data"] = df
+
+# Display Data
+if "data" in st.session_state:
+    st.subheader("📋 Sales Data")
+    st.dataframe(st.session_state["data"], use_container_width=True)
 
 
-def generate_sales(n):
-    n = int(n)
+# -------------------------------
+# Salesperson Totals
+# -------------------------------
+st.header("📊 Salesperson Totals")
 
-    names = np.array([f"Salesperson {i+1}" for i in range(n)])
-    sales = np.random.randint(0, 21, size=(n, 3))
+if st.button("Compute Totals"):
+    if "data" not in st.session_state:
+        st.error("Generate data first!")
+    else:
+        df = st.session_state["data"].copy()
 
-    table = np.column_stack((names, sales))
+        df["Total"] = df[["SUV", "Sedan", "Hatchback"]].sum(axis=1)
 
-    return table, table
+        st.dataframe(df[["Salesperson", "Total"]])
 
-
-def salesperson_totals(data):
-    data = np.array(data)
-
-    names = data[:, 0]
-    totals = np.sum(data[:, 1:].astype(float), axis=1)
-
-    return np.column_stack((names, totals))
-
-
-def category_totals(data):
-    data = np.array(data)
-
-    categories = np.array(["SUV", "Sedan", "Hatchback"])
-    totals = np.sum(data[:, 1:].astype(float), axis=0)
-
-    return np.column_stack((categories, totals))
+        # 📊 Bar Chart
+        st.subheader("📊 Total Sales per Salesperson")
+        plt.figure()
+        plt.bar(df["Salesperson"], df["Total"])
+        plt.xticks(rotation=45)
+        st.pyplot(plt)
 
 
-def rank_salespeople(data):
-    data = np.array(data)
+# -------------------------------
+# Category Totals
+# -------------------------------
+st.header("📈 Category Totals")
 
-    names = data[:, 0]
-    totals = np.sum(data[:, 1:].astype(float), axis=1)
+if st.button("Compute Category Totals"):
+    if "data" not in st.session_state:
+        st.error("Generate data first!")
+    else:
+        df = st.session_state["data"]
 
-    idx = np.argsort(totals)[::-1]
+        totals = df[["SUV", "Sedan", "Hatchback"]].sum()
 
-    ranked_names = names[idx]
-    ranked_totals = totals[idx]
+        st.write(totals)
 
-    ranks = np.arange(1, len(ranked_names) + 1)
-
-    return np.column_stack((ranks, ranked_names, ranked_totals))
-
-
-def filter_top_performers(data, threshold):
-    data = np.array(data)
-    threshold = float(threshold)
-
-    names = data[:, 0]
-    totals = np.sum(data[:, 1:].astype(float), axis=1)
-
-    mask = totals > threshold
-
-    filtered_names = names[mask]
-    filtered_totals = totals[mask]
-
-    if len(filtered_totals) == 0:
-        return np.array([["No results", ""]])
-
-    idx = np.argsort(filtered_totals)[::-1]
-
-    filtered_names = filtered_names[idx]
-    filtered_totals = filtered_totals[idx]
-
-    return np.column_stack((filtered_names, filtered_totals))
+        # 📊 Bar Chart
+        st.subheader("📊 Total Sales by Category")
+        plt.figure()
+        plt.bar(totals.index, totals.values)
+        st.pyplot(plt)
 
 
-with gr.Blocks(title="Car Sales Analyzer") as demo:
+# -------------------------------
+# Rankings
+# -------------------------------
+st.header("🏆 Rankings")
 
-    gr.Markdown("# 🚗 Car Sales Analyzer")
+if st.button("Rank Salespeople"):
+    if "data" not in st.session_state:
+        st.error("Generate data first!")
+    else:
+        df = st.session_state["data"].copy()
 
-    data_state = gr.State()
+        df["Total"] = df[["SUV", "Sedan", "Hatchback"]].sum(axis=1)
+        df = df.sort_values(by="Total", ascending=False)
+        df["Rank"] = np.arange(1, len(df) + 1)
 
-    with gr.Row():
-        count_input = gr.Number(value=8, label="Number of Salespeople")
-        generate_btn = gr.Button("Generate Sales Data", variant="primary")
+        st.dataframe(df[["Rank", "Salesperson", "Total"]])
 
-    sales_table = gr.Dataframe(
-        headers=["Salesperson", "SUV", "Sedan", "Hatchback"],
-        interactive=False
-    )
+        # 📊 Ranking Chart
+        st.subheader("🏆 Sales Rankings")
+        plt.figure()
+        plt.bar(df["Salesperson"], df["Total"])
+        plt.xticks(rotation=45)
+        st.pyplot(plt)
 
-    generate_btn.click(
-        generate_sales,
-        inputs=count_input,
-        outputs=[data_state, sales_table]
-    )
 
-    gr.Markdown("---")
+# -------------------------------
+# Filter Top Performers
+# -------------------------------
+st.header("🔍 Filter Top Performers")
 
-    with gr.Tab("📊 Salesperson Totals"):
-        total_btn = gr.Button("Compute Totals", variant="primary")
-        total_output = gr.Dataframe(
-            headers=["Salesperson", "Total Units"],
-            interactive=False
-        )
-        total_btn.click(salesperson_totals, inputs=data_state, outputs=total_output)
+threshold = st.number_input("Total Sales Threshold", value=25)
 
-    with gr.Tab("📈 Category Totals"):
-        category_btn = gr.Button("Compute Category Totals", variant="primary")
-        category_output = gr.Dataframe(
-            headers=["Category", "Total Units"],
-            interactive=False
-        )
-        category_btn.click(category_totals, inputs=data_state, outputs=category_output)
+if st.button("Filter"):
+    if "data" not in st.session_state:
+        st.error("Generate data first!")
+    else:
+        df = st.session_state["data"].copy()
 
-    with gr.Tab("🏆 Rankings"):
-        rank_btn = gr.Button("Rank Salespeople", variant="primary")
-        rank_output = gr.Dataframe(
-            headers=["Rank", "Salesperson", "Total Units"],
-            interactive=False
-        )
-        rank_btn.click(rank_salespeople, inputs=data_state, outputs=rank_output)
+        df["Total"] = df[["SUV", "Sedan", "Hatchback"]].sum(axis=1)
+        filtered = df[df["Total"] > threshold].sort_values(by="Total", ascending=False)
 
-    with gr.Tab("🔍 Filter Top Performers"):
-        threshold_input = gr.Number(value=25, label="Total Sales Threshold")
-        filter_btn = gr.Button("Filter", variant="primary")
-        filter_output = gr.Dataframe(
-            headers=["Salesperson", "Total Units"],
-            interactive=False
-        )
-        filter_btn.click(
-            filter_top_performers,
-            inputs=[data_state, threshold_input],
-            outputs=filter_output
-        )
+        if filtered.empty:
+            st.warning("No results found.")
+        else:
+            st.dataframe(filtered[["Salesperson", "Total"]])
 
-demo.launch(theme=gr.themes.Soft())
+            # 📊 Filter Chart
+            st.subheader("📊 Top Performers")
+            plt.figure()
+            plt.bar(filtered["Salesperson"], filtered["Total"])
+            plt.xticks(rotation=45)
+            st.pyplot(plt)
